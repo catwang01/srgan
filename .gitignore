@@ -6,3 +6,6 @@ sample/
 samples/
 checkpoint/
 __pycache__/
+DIV2K
+models
+.idea
