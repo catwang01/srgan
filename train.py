@@ -14,19 +14,46 @@ import argparse
 
 ###====================== HYPER-PARAMETERS ===========================###
 
-## Adam
-batch_size = config.TRAIN.batch_size  # use 8 if your GPU memory is small, and change [4, 4] in tl.vis.save_images to [2, 4]
-lr_init = config.TRAIN.lr_init
-beta1 = config.TRAIN.beta1
-## initialize G
-n_epoch_init = config.TRAIN.n_epoch_init
-## adversarial learning (SRGAN)
-n_epoch = config.TRAIN.n_epoch
-lr_decay = config.TRAIN.lr_decay
-decay_every = config.TRAIN.decay_every
-shuffle_buffer_size = 128
 
-# ni = int(np.sqrt(batch_size))
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--mode', type=str, default='srgan', help='srgan, evaluate')
+parser.add_argument('--batch_size', type=int, default=8, help='batch_size')
+parser.add_argument('--lr_init', type=float, default=1e-4, help='lr_init of Adam')
+parser.add_argument('--beta1', type=float, default=0.9, help='beta1 of Adam')
+parser.add_argument('--n_epoch_init', type=int, default=100, help='intializer G')
+
+parser.add_argument('--n_epoch', type=int, default=2000, help='adversarial learning SRGAN')
+parser.add_argument('--lr_decay', type=float, default=0.1, help='lr_decay of adversarial learning')
+parser.add_argument('--decay_every', type=float, default=100, help='decay for every')
+parser.add_argument('--train_hr_img_path', type=str, default='DIV2K/DIV2K_train_HR/', help="train_hr_img_path")
+parser.add_argument('--train_lr_img_path', type=str, default='DIV2K/DIV2K_train_LR_bicubic/X4/', help="train_lr_img_path")
+
+parser.add_argument('--shuffle_buffer_size', type=int, default=128, help="shuffle buffer size")
+
+parser.add_argument('--val_hr_img_path', type=str, default='DIV2K/DIV2K_valid_HR/', help="val_hr_img_path")
+parser.add_argument('--val_lr_img_path', type=str, default='DIV2K/DIV2K_valid_LR_bicubic/X4/', help="val_lr_img_path")
+
+## train set location
+
+args = parser.parse_args()
+
+tl.global_flag['mode'] = args.mode
+
+## Adam
+
+batch_size = args.batch_size  # use 8 if your GPU memory is small, and change [4, 4] in tl.vis.save_images to [2, 4]
+lr_init = args.lr_init
+beta1 = args.beta1
+
+## initialize G
+n_epoch_init = args.n_epoch_init
+
+## adversarial learning (SRGAN)
+n_epoch = args.n_epoch
+lr_decay = args.lr_decay
+decay_every = args.decay_every
+shuffle_buffer_size = args.shuffle_buffer_size
 
 # create folders to save result images and trained models
 save_dir = "samples"
@@ -92,7 +119,7 @@ def train():
     train_ds = get_train_data()
 
     ## initialize learning (G)
-    print("=" * 50 + "=Initialize learning (G) " + '=' * 50)
+    print("=" * 50 + " Initialize learning (G) " + '=' * 50)
     n_step_epoch = round(len(os.listdir(config.TRAIN.hr_img_path)) // batch_size)
 
     for epoch in range(n_epoch_init):
@@ -113,9 +140,10 @@ def train():
     ## adversarial learning (G, D)
     n_step_epoch = round(len(os.listdir(config.TRAIN.hr_img_path)) // batch_size)
 
-    print("=" * 100 + "Training!" + '=' * 100)
+    print("=" * 50 + " Training " + '=' * 50)
     for epoch in range(n_epoch):
         for step, (lr_patchs, hr_patchs) in enumerate(train_ds):
+            if step == 2: break
             if lr_patchs.shape[0] != batch_size: # if the remaining data in this epoch < batch_size
                 break
             step_time = time.time()
@@ -148,8 +176,8 @@ def train():
 
         if (epoch != 0) and (epoch % 10 == 0):
             tl.vis.save_images(fake_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_{}.png'.format(epoch)))
-            G.save_weights(os.path.join(checkpoint_dir, 'g.h5'))
-            D.save_weights(os.path.join(checkpoint_dir, 'd.h5'))
+            G.save_weights(os.path.join(checkpoint_dir, 'g-{}-{}.h5'.format(epoch, mse_loss)))
+            D.save_weights(os.path.join(checkpoint_dir, 'd-{}-{}.h5'.format(epoch, mse_loss)))
 
 def evaluate():
     ###====================== PRE-LOAD DATA ===========================###
@@ -197,15 +225,8 @@ def evaluate():
     tl.vis.save_image(out_bicu, os.path.join(save_dir, 'valid_bicubic.png'))
 
 
-if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--mode', type=str, default='srgan', help='srgan, evaluate')
-
-    args = parser.parse_args()
-
-    tl.global_flag['mode'] = args.mode
+def main():
 
     if tl.global_flag['mode'] == 'srgan':
         train()
@@ -213,3 +234,7 @@ if __name__ == '__main__':
         evaluate()
     else:
         raise Exception("Unknow --mode")
+
+
+if __name__ == '__main__':
+    main()
