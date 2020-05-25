@@ -10,8 +10,10 @@ import tensorflow as tf
 import tensorlayer as tl
 from model import get_G, get_D
 from config import config
+import argparse
 
 ###====================== HYPER-PARAMETERS ===========================###
+
 ## Adam
 batch_size = config.TRAIN.batch_size  # use 8 if your GPU memory is small, and change [4, 4] in tl.vis.save_images to [2, 4]
 lr_init = config.TRAIN.lr_init
@@ -54,6 +56,7 @@ def get_train_data():
     def generator_train():
         for img in train_hr_imgs:
             yield img
+
     def _map_fn_train(img):
         hr_patch = tf.image.random_crop(img, [384, 384, 3])
         hr_patch = hr_patch / (255. / 2.)
@@ -61,6 +64,7 @@ def get_train_data():
         hr_patch = tf.image.random_flip_left_right(hr_patch)
         lr_patch = tf.image.resize(hr_patch, size=[96, 96])
         return lr_patch, hr_patch
+
     train_ds = tf.data.Dataset.from_generator(generator_train, output_types=(tf.float32))
     train_ds = train_ds.map(_map_fn_train, num_parallel_calls=multiprocessing.cpu_count())
         # train_ds = train_ds.repeat(n_epoch_init + n_epoch)
@@ -80,6 +84,7 @@ def train():
     g_optimizer = tf.optimizers.Adam(lr_v, beta_1=beta1)
     d_optimizer = tf.optimizers.Adam(lr_v, beta_1=beta1)
 
+    # change the mode to train
     G.train()
     D.train()
     VGG.train()
@@ -87,7 +92,9 @@ def train():
     train_ds = get_train_data()
 
     ## initialize learning (G)
-    n_step_epoch = round(n_epoch_init // batch_size)
+    print("=" * 50 + "=Initialize learning (G) " + '=' * 50)
+    n_step_epoch = round(len(os.listdir(config.TRAIN.hr_img_path)) // batch_size)
+
     for epoch in range(n_epoch_init):
         for step, (lr_patchs, hr_patchs) in enumerate(train_ds):
             if lr_patchs.shape[0] != batch_size: # if the remaining data in this epoch < batch_size
@@ -98,13 +105,15 @@ def train():
                 mse_loss = tl.cost.mean_squared_error(fake_hr_patchs, hr_patchs, is_mean=True)
             grad = tape.gradient(mse_loss, G.trainable_weights)
             g_optimizer_init.apply_gradients(zip(grad, G.trainable_weights))
-            print("Epoch: [{}/{}] step: [{}/{}] time: {:.3f}s, mse: {:.3f} ".format(
-                epoch, n_epoch_init, step, n_step_epoch, time.time() - step_time, mse_loss))
+            print("Epoch: [{epoch}/{n_epoch_init}] step: [{step}/{n_step_epoch}] time: {time_elasped:.3f}s, mse: {mse_loss:.3f} ".format(
+                epoch=epoch, n_epoch_init=n_epoch_init, step=step, n_step_epoch=n_step_epoch, time_elasped=time.time() - step_time, mse_loss=mse_loss))
         if (epoch != 0) and (epoch % 10 == 0):
             tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_init_{}.png'.format(epoch)))
 
     ## adversarial learning (G, D)
-    n_step_epoch = round(n_epoch // batch_size)
+    n_step_epoch = round(len(os.listdir(config.TRAIN.hr_img_path)) // batch_size)
+
+    print("=" * 100 + "Training!" + '=' * 100)
     for epoch in range(n_epoch):
         for step, (lr_patchs, hr_patchs) in enumerate(train_ds):
             if lr_patchs.shape[0] != batch_size: # if the remaining data in this epoch < batch_size
@@ -127,8 +136,8 @@ def train():
             g_optimizer.apply_gradients(zip(grad, G.trainable_weights))
             grad = tape.gradient(d_loss, D.trainable_weights)
             d_optimizer.apply_gradients(zip(grad, D.trainable_weights))
-            print("Epoch: [{}/{}] step: [{}/{}] time: {:.3f}s, g_loss(mse:{:.3f}, vgg:{:.3f}, adv:{:.3f}) d_loss: {:.3f}".format(
-                epoch, n_epoch_init, step, n_step_epoch, time.time() - step_time, mse_loss, vgg_loss, g_gan_loss, d_loss))
+            print("Epoch: [{epoch}/{n_epoch}] step: [{step}/{n_step_epoch}] time: {time_elapsed:.3f}s, g_loss(mse:{mse_loss:.3f}, vgg:{vgg_loss:.3f}, adv:{g_gan_loss:.3f}) d_loss: {d_loss:.3f}".format(
+                epoch=epoch, n_epoch = n_epoch, step= step, n_step_epoch= n_step_epoch, time_elapsed=time.time() - step_time, mse_loss=mse_loss, vgg_loss=vgg_loss, g_gan_loss=g_gan_loss, d_loss=d_loss))
 
         # update the learning rate
         if epoch != 0 and (epoch % decay_every == 0):
@@ -189,7 +198,7 @@ def evaluate():
 
 
 if __name__ == '__main__':
-    import argparse
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--mode', type=str, default='srgan', help='srgan, evaluate')
