@@ -134,8 +134,14 @@ def train():
             g_optimizer_init.apply_gradients(zip(grad, G.trainable_weights))
             print("Epoch: [{epoch}/{n_epoch_init}] step: [{step}/{n_step_epoch}] time: {time_elasped:.3f}s, mse: {mse_loss:.3f} ".format(
                 epoch=epoch, n_epoch_init=n_epoch_init, step=step, n_step_epoch=n_step_epoch, time_elasped=time.time() - step_time, mse_loss=mse_loss))
+
         if (epoch != 0) and (epoch % 10 == 0):
-            tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_init_{}.png'.format(epoch)))
+            if batch_size == 4:
+                tl.vis.save_images(fake_hr_patchs.numpy(), [2, 2], os.path.join(save_dir, 'train_g_init_{}.png'.format(epoch)))
+            if batch_size == 8:
+                tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_init_{}.png'.format(epoch)))
+            if batch_size == 16:
+                tl.vis.save_images(fake_hr_patchs.numpy(), [4, 4], os.path.join(save_dir, 'train_g_init_{}.png'.format(epoch)))
 
     ## adversarial learning (G, D)
     n_step_epoch = round(len(os.listdir(config.TRAIN.hr_img_path)) // batch_size)
@@ -143,7 +149,6 @@ def train():
     print("=" * 50 + " Training " + '=' * 50)
     for epoch in range(n_epoch):
         for step, (lr_patchs, hr_patchs) in enumerate(train_ds):
-            if step == 2: break
             if lr_patchs.shape[0] != batch_size: # if the remaining data in this epoch < batch_size
                 break
             step_time = time.time()
@@ -175,9 +180,15 @@ def train():
             print(log)
 
         if (epoch != 0) and (epoch % 10 == 0):
-            tl.vis.save_images(fake_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_{}.png'.format(epoch)))
-            G.save_weights(os.path.join(checkpoint_dir, 'g-{}-{}.h5'.format(epoch, mse_loss)))
-            D.save_weights(os.path.join(checkpoint_dir, 'd-{}-{}.h5'.format(epoch, mse_loss)))
+            if batch_size == 4:
+                tl.vis.save_images(fake_patchs.numpy(), [2, 2], os.path.join(save_dir, 'train_g_{}.png'.format(epoch)))
+            if batch_size == 8:
+                tl.vis.save_images(fake_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_{}.png'.format(epoch)))
+            if batch_size == 16:
+                tl.vis.save_images(fake_patchs.numpy(), [4, 4], os.path.join(save_dir, 'train_g_{}.png'.format(epoch)))
+
+            G.save_weights(os.path.join(checkpoint_dir, 'g-{}-{:.3f}.h5'.format(epoch, mse_loss)))
+            D.save_weights(os.path.join(checkpoint_dir, 'd-{}-{:.3f}.h5'.format(epoch, mse_loss)))
 
 def evaluate():
     ###====================== PRE-LOAD DATA ===========================###
