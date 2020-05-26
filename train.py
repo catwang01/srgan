@@ -1,16 +1,21 @@
 #! /usr/bin/python
 # -*- coding: utf8 -*-
 
+import argparse
 import os
 import time
-import random
+from itertools import chain
+from PIL import Image
+
+import multiprocessing
 import numpy as np
-import scipy, multiprocessing
+import scipy
 import tensorflow as tf
 import tensorlayer as tl
-from model import get_G, get_D
+from matplotlib import pyplot as plt
+
 from config import config
-import argparse
+from model import get_G, get_D
 
 ###====================== HYPER-PARAMETERS ===========================###
 
@@ -210,31 +215,58 @@ def evaluate():
 
     ###========================== DEFINE MODEL ============================###
     imid = 64  # 0: 企鹅  81: 蝴蝶 53: 鸟  64: 古堡
-    valid_lr_img = valid_lr_imgs[imid]
-    valid_hr_img = valid_hr_imgs[imid]
-    # valid_lr_img = get_imgs_fn('test.png', 'data2017/')  # if you want to test your own image
-    valid_lr_img = (valid_lr_img / 127.5) - 1  # rescale to ［－1, 1]
-    # print(valid_lr_img.min(), valid_lr_img.max())
+    # valid_lr_img = valid_lr_imgs[imid]
+    # valid_hr_img = valid_hr_imgs[imid]
 
     G = get_G([1, None, None, 3])
     G.load_weights(os.path.join(checkpoint_dir, 'g.h5'))
     G.eval()
 
-    valid_lr_img = np.asarray(valid_lr_img, dtype=np.float32)
-    valid_lr_img = valid_lr_img[np.newaxis,:,:,:]
-    size = [valid_lr_img.shape[1], valid_lr_img.shape[2]]
+    imgs = {}
+    valid_hr_img = Image.open("face3.jpg")
+    valid_lr_img = valid_hr_img.resize((int(valid_hr_img.size[0]/4), int(valid_hr_img.size[1]/4)))
+    valid_lr_img = valid_hr_img
+    valid_lr_img = np.array(valid_lr_img, dtype=np.float32)
+    valid_lr_img = valid_lr_img / 255.0
+    # print(valid_lr_img.min(), valid_lr_img.max())
 
-    out = G(valid_lr_img).numpy()
+    valid_hr_img = np.array(valid_hr_img, dtype=np.float32)
+    valid_hr_img = valid_hr_img / 255.0
+    imgs['hr'] = valid_hr_img
+    imgs['lr'] = valid_lr_img
 
-    print("LR size: %s /  generated HR size: %s" % (size, out.shape))  # LR size: (339, 510, 3) /  gen HR size: (1, 1356, 2040, 3)
+    size = [imgs['lr'].shape[0], imgs['lr'].shape[1]]
+
+    input_img = imgs['lr'] * 2 - 1  # rescale to ［－1, 1]
+    input_img = input_img[np.newaxis, :, :, :]
+    out = G(input_img)
+
+    out = out.numpy().squeeze()
+    imgs['srgan'] = (out + 1) / 2
+
+    imgs['bicubic'] = scipy.misc.imresize(imgs['lr'], [size[0] * 4, size[1] * 4], interp='bicubic', mode=None)
+
+    print("LR size: %s /  generated HR size: %s" % (size, imgs['hr'].shape[:]))  # LR size: (339, 510, 3) /  gen HR size: (1, 1356, 2040, 3)
     print("[*] save images")
-    tl.vis.save_image(out[0], os.path.join(save_dir, 'valid_gen.png'))
-    tl.vis.save_image(valid_lr_img[0], os.path.join(save_dir, 'valid_lr.png'))
-    tl.vis.save_image(valid_hr_img, os.path.join(save_dir, 'valid_hr.png'))
+    for name, picture in imgs.items():
+        tl.vis.save_image(picture, os.path.join(save_dir, 'valid_{}.png'.format(name)))
 
-    out_bicu = scipy.misc.imresize(valid_lr_img[0], [size[0] * 4, size[1] * 4], interp='bicubic', mode=None)
-    tl.vis.save_image(out_bicu, os.path.join(save_dir, 'valid_bicubic.png'))
+    fig, axes = plt.subplots(2, 2, figsize=(9, 5), dpi=500, squeeze=False, )
+    axes = list(chain(*axes))
+    for ax, name, picture in zip(axes, imgs.keys(), imgs.values()):
+        try:
+            ax.imshow(picture)
+            ax.set_title(name)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_axis_off()
+        except:
+            print(name)
 
+    # 取消坐标轴
+    plt.axis('off')
+    plt.show()
+    plt.close(fig)
 
 
 def main():

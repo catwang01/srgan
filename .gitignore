@@ -9,3 +9,5 @@ __pycache__/
 DIV2K
 models
 .idea
+*.h5
+*.jpg
